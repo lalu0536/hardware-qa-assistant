@@ -1,11 +1,28 @@
 import subprocess
 import platform
+import shutil
 
-def get_cpu_info():
-    """Get CPU information safely."""
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI(
+    title="Hardware Q&A Assistant",
+    description="Ask questions about CPU, RAM, disk and Linux system information."
+)
+
+
+class Question(BaseModel):
+    question: str
+
+
+def run_command(command):
+    """Run only predefined, safe system commands."""
+    if shutil.which(command[0]) is None:
+        return f"{command[0]} command is not available on this server."
+
     try:
         result = subprocess.run(
-            ["lscpu"],
+            command,
             capture_output=True,
             text=True,
             timeout=5,
@@ -13,37 +30,21 @@ def get_cpu_info():
         )
         return result.stdout
     except Exception as error:
-        return f"Could not read CPU information: {error}"
+        return f"Could not read information: {error}"
+
+
+def get_cpu_info():
+    return run_command(["lscpu"])
 
 
 def get_memory_info():
-    """Get memory information safely."""
-    try:
-        result = subprocess.run(
-            ["free", "-h"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=True
-        )
-        return result.stdout
-    except Exception as error:
-        return f"Could not read memory information: {error}"
+    return run_command(["free", "-h"])
 
 
 def get_disk_info():
-    """Get disk information safely."""
-    try:
-        result = subprocess.run(
-            ["lsblk", "-o", "NAME,SIZE,TYPE,MOUNTPOINT"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=True
-        )
-        return result.stdout
-    except Exception as error:
-        return f"Could not read disk information: {error}"
+    return run_command(
+        ["lsblk", "-o", "NAME,SIZE,TYPE,MOUNTPOINT"]
+    )
 
 
 def answer_question(question):
@@ -61,35 +62,40 @@ def answer_question(question):
     elif "system" in question or "linux" in question:
         return platform.platform()
 
-    else:
-        return (
-            "Sorry, I cannot answer that question yet.\n"
-            "Try asking about CPU, RAM, disk, or Linux system."
-        )
+    return (
+        "Sorry, I cannot answer that question yet. "
+        "Try asking about CPU, RAM, disk, or Linux system."
+    )
 
 
-def main():
-    print("=" * 50)
-    print("       HARDWARE Q&A ASSISTANT")
-    print("=" * 50)
-    print("Ask questions about your computer.")
-    print("Type 'exit' to close the assistant.")
-
-    while True:
-        question = input("\nYou: ").strip()
-
-        if question.lower() == "exit":
-            print("Assistant: Goodbye!")
-            break
-
-        if not question:
-            print("Assistant: Please enter a question.")
-            continue
-
-        answer = answer_question(question)
-        print("\nAssistant:")
-        print(answer)
+@app.get("/")
+def home():
+    return {
+        "message": "Hardware Q&A Assistant is running!",
+        "docs": "/docs"
+    }
 
 
-if __name__ == "__main__":
-    main()
+@app.get("/health")
+def health():
+    return {"status": "healthy"}
+
+
+@app.post("/ask")
+def ask_question(data: Question):
+    if not data.question.strip():
+        return {"answer": "Please enter a question."}
+
+    return {
+        "question": data.question,
+        "answer": answer_question(data.question)
+    }
+
+
+
+
+
+
+   
+
+   
